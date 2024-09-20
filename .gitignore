@@ -6,5 +6,9 @@
 *.dat
 *.txt
 *.h5
-
+*.pkl
+*.conf
+*.log
+*.err
+*.out
 
