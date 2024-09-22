@@ -78,38 +78,92 @@ def crop_face(img, landmark=None, bbox=None, margin=False, crop_by_bbox=True, ab
     else:
         return img_cropped, None, None, None
 
-def process_real_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 380)):
 
-
+def process_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 380)):
     face_list = []
     idx_list = []
     cap = cv2.VideoCapture(video_path)
     frame_idx = 0
 
     video_name = os.path.basename(video_path)
-    print(video_name) #000.mp4
-    video_base_name = video_name
-  
-   
+    print(video_name) #000_003.mp4
+    video_base_name = video_name.split('_')[0] #000_003
+
+    video_base_name = video_base_name+".mp4"
+
+    # print(video_base_name,"extracted") #000_003
+
 
     #get num of frames
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(num_frames) #304
+    
 
 
-    frame_shape = None
+    og_video_path = os.path.join(original_vid_frames_dir, video_base_name.split(".")[0]+".mp4")
+    #calculate the resolution scale by taking a frame from original video and comparing it with the face extracted frame
+    og_cap = cv2.VideoCapture(og_video_path)
+    ret, original_frame = og_cap.read()
+    if not ret:
+        raise ValueError(f"Error reading original video frame: {og_video_path}")
+
+
+    og_cap.release()
+
+    
+
+    
+
+    
+
+
+    
+    # original_frame = cv2.cvtColor(original_frame, cv2.COLOR_BGR2RGB)
+
+    sanity_frame_fir = "/ceph/hpc/data/st2207-pgp-users/DataBase/DeepFake/FaceForensics++/20-frames-FaceShifter/"
+    #1-000_003_000.png
+    m=video_name.split(".")[0]
+    sanity_frame_path = os.path.join(sanity_frame_fir, f"1-{m}_000.png")
+    print("sanity_frame_path", sanity_frame_path)
+    sanity_frame_img = cv2.imread(sanity_frame_path)
+    #to rgb
+    sanity_frame_img = cv2.cvtColor(sanity_frame_img, cv2.COLOR_BGR2RGB)
+
+    if sanity_frame_img is None:
+        print(f"Error reading sanity frame image: {sanity_frame_path}")
+        raise ValueError(f"Error reading sanity frame image: {sanity_frame_path}")
+
+    #get size of original frame
+    original_frame_size = original_frame.shape[:2]
+    
+
+    scale = None
+    sanity_checked = False
+    sanity_frame = None
+
     while True:
         ret, frame = cap.read()
-        #rgb    
+
+        #to rgb
+
+
         if not ret:
             break
+
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         frame_idx += 1
         frame_number_str = f"{frame_idx:05d}"
 
-        if frame_shape is None:
-            frame_shape = frame.shape
+        if scale is None:
+            scalex = original_frame_size[1] / frame.shape[1]
+            # print("og_frame_size", original_frame_size)
+            # print("frame_size", frame.shape)
+
+            scalex = 1 / scalex
+
+            print("Scale:", scalex)
+            scale = scalex
 
 
 
@@ -135,7 +189,17 @@ def process_real_video(video_path, face_dir,original_vid_frames_dir,image_size=(
                 y1 = min(frame.shape[0], y1)
 
                 bbox_array = np.array([[x0, y0], [x1, y1]])
-                face_crop = crop_face(frame, bbox=bbox_array, crop_by_bbox=True, only_img=True, phase='test',resolution_scale=1.0)
+                face_crop = crop_face(frame, bbox=bbox_array, crop_by_bbox=True, only_img=True, phase='test',resolution_scale=scale)
+
+                if not sanity_checked:
+                    #do predition on og frame
+                    og_face_crop = crop_face(sanity_frame_img, bbox=bbox_array, crop_by_bbox=True, only_img=True, phase='test',resolution_scale=1)
+                    og_face_crop = cv2.resize(og_face_crop, image_size)
+                    og_face_crop = og_face_crop.transpose((2, 0, 1))  # Convert to (C, H, W)
+                    sanity_frame = og_face_crop
+                    sanity_checked = True
+                    
+    
                 face_crop = cv2.resize(face_crop, image_size)
                 face_crop = face_crop.transpose((2, 0, 1))  # Convert to (C, H, W)
                 face_list.append(face_crop)
@@ -146,8 +210,7 @@ def process_real_video(video_path, face_dir,original_vid_frames_dir,image_size=(
             print(f"Bounding box not found for {json_path}_{frame_number_str}.png")
             continue
     cap.release()
-    
-    return face_list, idx_list, frame_shape,num_frames
+    return face_list, idx_list,scale, sanity_frame
 
 def save_results(results, output_pkl='output.pkl'):
         """
@@ -189,7 +252,7 @@ def save_results(results, output_pkl='output.pkl'):
 
 def predict(video_path, face_dir,original_vid_frames_dir,debug_dir,model,device, image_size=(380, 380),batch_size=128 * 2):
     
-    face_list,idx_list,size,frame_count= process_real_video(video_path,face_dir,original_vid_frames_dir, image_size=(380, 380))
+    face_list, idx_list,scale,sanity_frame = process_video(video_path,face_dir,original_vid_frames_dir, image_size=(380, 380))
     print(f"Processing {video_path} with {len(face_list)} frames")
 
     #save to debug
@@ -199,6 +262,12 @@ def predict(video_path, face_dir,original_vid_frames_dir,debug_dir,model,device,
         # print("face", face.shape)
         cv2.imwrite(os.path.join(debug_dir, f"{os.path.basename(video_path)}_{i:05d}.png"), face)
 
+     #save sanity frame
+    sf = sanity_frame.transpose(1, 2, 0)
+    sf = cv2.cvtColor(sf, cv2.COLOR_RGB2BGR)
+    # print("sanity_frame", sanity_frame.shape)
+    
+    cv2.imwrite(os.path.join(debug_dir, f"{os.path.basename(video_path)}_000000_sanity.png"), sf)
 
     predictions = []
     idxs = []
@@ -215,7 +284,7 @@ def predict(video_path, face_dir,original_vid_frames_dir,debug_dir,model,device,
             # std = torch.tensor([0.229, 0.224, 0.225]).to(device).view(1, 3, 1, 1)
             # batch_faces = (batch_faces - mean) / std
 
-            # print(batch_faces.shape)
+            print(batch_faces.shape)
 
             preds = model(batch_faces)
             preds = preds.softmax(1)[:, 1]
@@ -223,6 +292,14 @@ def predict(video_path, face_dir,original_vid_frames_dir,debug_dir,model,device,
             predictions.extend(preds.cpu().numpy())
             idxs.extend(batch_idxs)
 
+
+        sanity_frame = torch.tensor([sanity_frame]).to(device).float() / 255.0
+
+        print("sanity_fram tensor", sanity_frame.shape)
+
+        sanitypred = model(sanity_frame)
+        sanitypred = sanitypred.softmax(1)[:, 1]
+        print("sanitypred", sanitypred)
 
 
     # Aggregate predictions
@@ -241,7 +318,7 @@ def predict(video_path, face_dir,original_vid_frames_dir,debug_dir,model,device,
 
     print(f'fakeness: {pred_mean:.4f}')
 
-    return {'video': video_path, 'preds': np.array(pred_res), 'mean': pred_mean, 'size':size,"frame_count": frame_count}
+    return {'video': video_path, 'preds': np.array(pred_res), 'mean': pred_mean, 'scale': scale, 'sanitypred': sanitypred.item()}
 
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -260,13 +337,12 @@ def main(args):
     print("num_workers", num_workers)
 
 
-    original_vid_frames_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_original_raw/original_sequences/youtube/raw/videos/"
 
-    all_test_videos = os.listdir(original_vid_frames_dir)
+    all_test_videos = os.listdir("/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_Face2Face/manipulated_sequences/Face2Face/raw/videos")
     #sort the list
     all_test_videos.sort()
 
-    all_test_videos = [os.path.join(original_vid_frames_dir, v) for v in all_test_videos]
+    all_test_videos = [os.path.join("/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_Face2Face/manipulated_sequences/Face2Face/raw/videos", v) for v in all_test_videos]
     print("got", len(all_test_videos), "videos")
 
     
@@ -333,11 +409,12 @@ def main(args):
     
     face_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/face/"
 
-    debug_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/debug_real/"
+    debug_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/debug_f2f/"
     #check and make dir
     if not os.path.exists(debug_dir):
         os.makedirs(debug_dir, exist_ok=True)
 
+    original_vid_frames_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_original_raw/original_sequences/youtube/raw/videos/"
 
     output_name = f"pred_worker_{worker_id}_{num_workers}_gpu_{gpu_id}_{num_gpus}.pkl"
     output_txt = os.path.join(args.output_dir, output_name)
@@ -373,7 +450,7 @@ def main(args):
     results = []
     for i, video in enumerate(tqdm(test_videos)):
         result = predict(video, face_dir,original_vid_frames_dir,debug_dir, model,device, image_size=(380, 380))
-        print(f"vid {result['video']} fakeness: {result['mean']:.4f} size: {result['size']}")
+        print(f"vid {result['video']} fakeness: {result['mean']:.4f} sanity: {result['sanitypred']:.4f}")
         results.append(result)
         
 
@@ -419,7 +496,7 @@ if __name__ == '__main__':
     parser.add_argument("--save_every", type=int, default=10)
 
     #output_dir
-    parser.add_argument("--output_dir", type=str, default='/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/SelfBlendedImages/preds_original_vids2/')
+    parser.add_argument("--output_dir", type=str, default='/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/SelfBlendedImages/preds_f2f/')
 
     args = parser.parse_args()
 

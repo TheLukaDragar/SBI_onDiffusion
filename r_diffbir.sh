@@ -1,7 +1,7 @@
 #!/bin/sh
-#SBATCH --job-name=tpredict_SBI
-#SBATCH --output=./logs/predict_codeformer%a.out
-#SBATCH --error=./logs/predict_codeformer%a.err
+#SBATCH --job-name=tpredict_dSBI
+#SBATCH --output=./logs/predictDiff%a.out
+#SBATCH --error=./logs/predictDiff%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4  # Request one GPU per task
@@ -30,7 +30,7 @@ NUM_GPUS=4  # Number of GPUs per node
 # done
 # Create an array to hold process IDs
 # Create a temporary tasks file for this SLURM_ARRAY_TASK_ID
-TASKS_FILE=tasks_$WORKER_ID.conf
+TASKS_FILE=tasksluka_diffbr_$WORKER_ID.conf
 
 # Generate the tasks.conf file dynamically
 # cat <<EOL > $TASKS_FILE
@@ -40,10 +40,10 @@ TASKS_FILE=tasks_$WORKER_ID.conf
 # 3 python3 predict_timm_1MDF_on_test_only_visual_gpus.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 3 --num_gpus $NUM_GPUS
 # EOL
 cat <<EOL > $TASKS_FILE
-0 bash -c 'CUDA_VISIBLE_DEVICES=0 python3 src/inference/luka.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 0 --num_gpus $NUM_GPUS'
-1 bash -c 'CUDA_VISIBLE_DEVICES=1 python3 src/inference/luka.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 1 --num_gpus $NUM_GPUS'
-2 bash -c 'CUDA_VISIBLE_DEVICES=2 python3 src/inference/luka.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 2 --num_gpus $NUM_GPUS'
-3 bash -c 'CUDA_VISIBLE_DEVICES=3 python3 src/inference/luka.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 3 --num_gpus $NUM_GPUS'
+0 bash -c 'CUDA_VISIBLE_DEVICES=0 python3 src/inference/luka_diffbr.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 0 --num_gpus $NUM_GPUS'
+1 bash -c 'CUDA_VISIBLE_DEVICES=1 python3 src/inference/luka_diffbr.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 1 --num_gpus $NUM_GPUS'
+2 bash -c 'CUDA_VISIBLE_DEVICES=2 python3 src/inference/luka_diffbr.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 2 --num_gpus $NUM_GPUS'
+3 bash -c 'CUDA_VISIBLE_DEVICES=3 python3 src/inference/luka_diffbr.py --num_workers $NUM_WORKERS --worker_id $WORKER_ID --gpu_id 3 --num_gpus $NUM_GPUS'
 EOL
 
 # Run the tasks using srun with the --multi-prog option

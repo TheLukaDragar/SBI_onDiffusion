@@ -104,6 +104,10 @@ def process_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 
     #calculate the resolution scale by taking a frame from original video and comparing it with the face extracted frame
     og_cap = cv2.VideoCapture(og_video_path)
     ret, original_frame = og_cap.read()
+    if not ret:
+        raise ValueError(f"Error reading original video frame: {og_video_path}")
+
+
     og_cap.release()
 
     
@@ -116,12 +120,25 @@ def process_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 
     
     # original_frame = cv2.cvtColor(original_frame, cv2.COLOR_BGR2RGB)
 
-    sanity_frame_fir = "/ceph/hpc/data/st2207-pgp-users/DataBase/DeepFake/FaceForensics++/20-frames-FaceShifter/"
+    sanity_frame_fir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_Face2Face/manipulated_sequences/Face2Face/raw/videos"
     #1-000_003_000.png
-    m=video_name.split(".")[0]
-    sanity_frame_path = os.path.join(sanity_frame_fir, f"1-{m}_000.png")
+    # m=video_name.split(".")[0]
+    # sanity_frame_path = os.path.join(sanity_frame_fir, f"1-{m}_000.png")
+    sanity_frame_path = os.path.join(sanity_frame_fir,video_name)
     print("sanity_frame_path", sanity_frame_path)
-    sanity_frame_img = cv2.imread(sanity_frame_path)
+    # sanity_frame_img = cv2.imread(sanity_frame_path)
+
+    sanity_cap = cv2.VideoCapture(sanity_frame_path)
+    ret, sanity_frame_img = sanity_cap.read()
+
+    sanity_cap.release()
+
+    sanity_frame_img = cv2.cvtColor(sanity_frame_img, cv2.COLOR_BGR2RGB)
+
+
+    if sanity_frame_img is None:
+        print(f"Error reading sanity frame image: {sanity_frame_path}")
+        raise ValueError(f"Error reading sanity frame image: {sanity_frame_path}")
 
     #get size of original frame
     original_frame_size = original_frame.shape[:2]
@@ -133,8 +150,15 @@ def process_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 
 
     while True:
         ret, frame = cap.read()
+
+        #to rgb
+
+
         if not ret:
             break
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
         frame_idx += 1
         frame_number_str = f"{frame_idx:05d}"
 
@@ -182,11 +206,7 @@ def process_video(video_path, face_dir,original_vid_frames_dir,image_size=(380, 
                     sanity_frame = og_face_crop
                     sanity_checked = True
                     
-                  
-
-
-                    
-
+    
                 face_crop = cv2.resize(face_crop, image_size)
                 face_crop = face_crop.transpose((2, 0, 1))  # Convert to (C, H, W)
                 face_list.append(face_crop)
@@ -396,10 +416,10 @@ def main(args):
     
     face_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/face/"
 
-    debug_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/debug2/"
+    debug_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/debug_codefromer/"
     #check and make dir
     if not os.path.exists(debug_dir):
-        os.makedirs(debug_dir)
+        os.makedirs(debug_dir, exist_ok=True)
 
     original_vid_frames_dir = "/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/FF_original_raw/original_sequences/youtube/raw/videos/"
 
@@ -452,7 +472,7 @@ def main(args):
     # Save any remaining results
     if len(results) > 0:
         # print("Saving results to disk")
-        save_results(results)
+        save_results(results, output_pkl=output_txt)
         results = []
 
     print("All videos processed.")
@@ -480,16 +500,16 @@ if __name__ == '__main__':
 
     parser.add_argument("--num_gpus", type=int, default=4)
 
-    parser.add_argument("--save_every", type=int, default=1)
+    parser.add_argument("--save_every", type=int, default=10)
 
     #output_dir
-    parser.add_argument("--output_dir", type=str, default='/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/SelfBlendedImages/preds_testig/')
+    parser.add_argument("--output_dir", type=str, default='/ceph/hpc/data/st2207-pgp-users/ldragar/Marijaproject/SelfBlendedImages/preds_codeformer/')
 
     args = parser.parse_args()
 
     #chekc if the output dir exists
     if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+        os.makedirs(args.output_dir, exist_ok=True)
 
 
     main(args)
